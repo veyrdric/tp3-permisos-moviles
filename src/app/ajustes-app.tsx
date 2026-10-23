@@ -27,6 +27,7 @@ export default function AjustesApp() {
       setQuiereAvisos(false);
       return;
     }
+    if (!permiso.disponible) return;
     setQuiereAvisos(true);
     if (concedido) return;
     // Pantalla previa primero; el diálogo del sistema sale de ahí.
@@ -61,21 +62,30 @@ export default function AjustesApp() {
           <Switch
             value={activado}
             onValueChange={cambiar}
+            disabled={!permiso.disponible}
             trackColor={{ true: Colores.primario, false: Colores.borde }}
           />
         </View>
 
         {permiso.estado === 'cargando' ? <Cargando texto="Revisando el permiso…" /> : null}
+
+        {!permiso.disponible ? (
+          <Nota>
+            Este entorno no trae el módulo nativo de notificaciones, así que el interruptor queda
+            apagado. Pasa en Expo Go para Android, que desde el SDK 53 ya no lo incluye. En una
+            development build funciona normal, y mientras tanto los avisos se leen abajo.
+          </Nota>
+        ) : null}
         {permiso.parcial ? <Chip texto={permiso.parcial} tono="aviso" /> : null}
 
-        {quiereAvisos && permiso.estado === 'preguntable' ? (
+        {permiso.disponible && quiereAvisos && permiso.estado === 'preguntable' ? (
           <Nota>
             Todavía no autorizaste las notificaciones. Tocá otra vez el interruptor para volver a
             ver la explicación.
           </Nota>
         ) : null}
 
-        {quiereAvisos && permiso.estado === 'bloqueado' ? (
+        {permiso.disponible && quiereAvisos && permiso.estado === 'bloqueado' ? (
           <>
             <Nota>
               Las notificaciones están bloqueadas, así que el sistema ya no va a preguntar. Se
@@ -103,7 +113,7 @@ export default function AjustesApp() {
         <Boton titulo="Ver mis avisos" variante="secundario" onPress={() => router.push('/avisos')} />
       </Tarjeta>
 
-      {Platform.OS === 'ios' && permiso.estado === 'preguntable' ? (
+      {permiso.disponible && Platform.OS === 'ios' && permiso.estado === 'preguntable' ? (
         <Tarjeta>
           <Titulo>Avisos silenciosos</Titulo>
           <Parrafo>

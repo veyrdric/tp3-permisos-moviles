@@ -43,25 +43,49 @@ function FilaPermiso({ recurso }: { recurso: Recurso }) {
     <Tarjeta>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: Espacio.sm }}>
         <Titulo>{ficha.titulo}</Titulo>
-        <Chip texto={ETIQUETA_ESTADO[estado]} tono={TONO_ESTADO[estado]} />
+        {permiso.disponible ? (
+          <Chip texto={ETIQUETA_ESTADO[estado]} tono={TONO_ESTADO[estado]} />
+        ) : (
+          <Chip texto="No disponible acá" tono="neutro" />
+        )}
       </View>
       <Parrafo>{ficha.beneficio}</Parrafo>
       {parcial ? <Chip texto={parcial} tono="aviso" /> : null}
-      <Nota>{detalleCrudo(permiso.recurso, respuesta)}</Nota>
+      {permiso.disponible ? (
+        <Nota>
+          {detalleCrudo(permiso.recurso, respuesta)}
+          {permiso.consultadoEn ? `\nÚltima consulta: ${hora(permiso.consultadoEn)}` : ''}
+        </Nota>
+      ) : (
+        <Nota>
+          Este entorno no trae el módulo nativo, así que no hay permiso que pedir. Pasa en Expo
+          Go para Android. En una development build el estado real aparece acá.
+        </Nota>
+      )}
 
-      {estado === 'preguntable' ? (
+      {permiso.disponible && estado === 'preguntable' ? (
         <Boton
           titulo="Pedir permiso"
           onPress={() => router.push({ pathname: '/permisos/[recurso]', params: { recurso } })}
         />
       ) : null}
-      {estado === 'bloqueado' ? (
+      {permiso.disponible && estado === 'bloqueado' ? (
         <Boton
           titulo="Abrir Ajustes"
           onPress={() => router.push({ pathname: '/permisos/[recurso]', params: { recurso } })}
         />
       ) : null}
       {estado === 'concedido' ? <Nota>Alternativa si lo revocás: {ficha.alternativa}</Nota> : null}
+
+      {permiso.disponible ? (
+        <Boton
+          titulo="Volver a consultar"
+          variante="secundario"
+          onPress={() => {
+            void permiso.consultar();
+          }}
+        />
+      ) : null}
     </Tarjeta>
   );
 }
@@ -88,6 +112,10 @@ function FilaFotos() {
       </Nota>
     </Tarjeta>
   );
+}
+
+function hora(ms: number): string {
+  return new Date(ms).toLocaleTimeString('es-AR');
 }
 
 /** Los campos de plataforma que explican el matiz, tal como los devuelve Expo. */

@@ -1,8 +1,52 @@
-import * as Notifications from 'expo-notifications';
+import { PermissionStatus } from 'expo-modules-core';
+import type { NotificationPermissionsStatus } from 'expo-notifications';
 import { Platform } from 'react-native';
 
 /** Canal de Android. Tiene que existir ANTES de pedir el permiso. */
 export const CANAL_REPORTES = 'reportes';
+
+type Modulo = typeof import('expo-notifications');
+
+let modulo: Modulo | null | undefined;
+
+/**
+ * expo-notifications se carga a mano y dentro de un try/catch.
+ *
+ * En Android el módulo pide `ExpoTopicSubscriptionModule` apenas se importa,
+ * y ese módulo nativo no está en Expo Go: desde SDK 53 Expo Go dejó de
+ * incluir el push de Android. Con un `import` normal arriba del archivo, la
+ * app se cae al arrancar antes de dibujar nada. Cargándolo acá el fallo queda
+ * acotado: la app sigue funcionando y los avisos se leen en /avisos.
+ *
+ * En una development build el módulo existe y todo anda normal. Es el mismo
+ * punto de la Parte D6: Expo Go no es tu app.
+ */
+function cargar(): Modulo | null {
+  if (modulo !== undefined) return modulo;
+  try {
+    modulo = require('expo-notifications') as Modulo;
+  } catch {
+    modulo = null;
+  }
+  return modulo;
+}
+
+/** ¿Este entorno tiene el módulo nativo de notificaciones? */
+export function hayNotificaciones(): boolean {
+  return cargar() !== null;
+}
+
+/**
+ * Lo que respondemos cuando el módulo no está: no se puede usar y no hay a
+ * quién preguntarle. Es la misma forma que devuelve Expo, así que el resto de
+ * la app no necesita saber que pasó algo raro.
+ */
+export const SIN_MODULO: NotificationPermissionsStatus = {
+  status: PermissionStatus.DENIED,
+  granted: false,
+  canAskAgain: false,
+  expires: 'never',
+};
 
 /**
  * En Android las notificaciones se muestran dentro de un canal. Si pedís
@@ -10,7 +54,9 @@ export const CANAL_REPORTES = 'reportes';
  * ubicar los avisos y el diálogo puede no aparecer.
  */
 export async function prepararCanalAndroid(): Promise<void> {
-  if (Platform.OS !== 'android') return;
+  const Notifications = cargar();
+  if (!Notifications || Platform.OS !== 'android') return;
+
   await Notifications.setNotificationChannelAsync(CANAL_REPORTES, {
     name: 'Reportes',
     description: 'Avisos sobre el estado de los desperfectos que reportaste.',
@@ -21,6 +67,9 @@ export async function prepararCanalAndroid(): Promise<void> {
 
 /** Que el aviso también se vea con la app abierta. */
 export function configurarPresentacion(): void {
+  const Notifications = cargar();
+  if (!Notifications) return;
+
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowBanner: true,
@@ -31,14 +80,24 @@ export function configurarPresentacion(): void {
   });
 }
 
+/** Lee el estado actual sin mostrar ningún diálogo. */
+export async function consultarPermisoNotificaciones(): Promise<NotificationPermissionsStatus> {
+  const Notifications = cargar();
+  if (!Notifications) return SIN_MODULO;
+  return Notifications.getPermissionsAsync();
+}
+
 /**
- * Pide el permiso de notificaciones. En Android crea el canal primero.
- * `provisional` (sólo iOS) pide avisos silenciosos, que llegan al centro de
+ * Pide el permiso. En Android crea el canal primero.
+ * `provisional`, sólo en iOS, pide avisos silenciosos: llegan al centro de
  * notificaciones sin mostrar ningún diálogo.
  */
 export async function pedirPermisoNotificaciones(
   { provisional = false }: { provisional?: boolean } = {}
-): Promise<Notifications.NotificationPermissionsStatus> {
+): Promise<NotificationPermissionsStatus> {
+  const Notifications = cargar();
+  if (!Notifications) return SIN_MODULO;
+
   await prepararCanalAndroid();
   return Notifications.requestPermissionsAsync({
     ios: {
@@ -50,20 +109,18 @@ export async function pedirPermisoNotificaciones(
   });
 }
 
-/** iOS puede devolver 'granted' con autorización provisional (avisos silenciosos). */
-export function esProvisional(
-  respuesta: Notifications.NotificationPermissionsStatus | null
-): boolean {
-  return respuesta?.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
+/** iOS puede autorizar de forma provisional: avisos silenciosos, sin diálogo. */
+export function esProvisional(respuesta: NotificationPermissionsStatus | null): boolean {
+  const Notifications = cargar();
+  if (!Notifications || !respuesta) return false;
+  return respuesta.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
 }
 
 /**
- * En iOS, provisional llega como `granted: false` con `ios.status = PROVISIONAL`.
- * Para la app eso es "puede avisar", así que lo tratamos como concedido.
+ * Con autorización provisional `granted` puede venir en false, pero la app
+ * igual puede avisar. Para nosotros eso ya cuenta como concedido.
  */
-export function puedeAvisar(
-  respuesta: Notifications.NotificationPermissionsStatus | null
-): boolean {
+export function puedeAvisar(respuesta: NotificationPermissionsStatus | null): boolean {
   if (!respuesta) return false;
   return respuesta.granted || esProvisional(respuesta);
 }
@@ -74,6 +131,9 @@ export async function programarAvisoResolucion(
   cuerpo: string,
   segundos = 10
 ): Promise<string | null> {
+  const Notifications = cargar();
+  if (!Notifications) return null;
+
   try {
     return await Notifications.scheduleNotificationAsync({
       content: { title: titulo, body: cuerpo, data: { canal: CANAL_REPORTES } },
@@ -84,7 +144,7 @@ export async function programarAvisoResolucion(
       },
     });
   } catch {
-    // Expo Go no soporta todo el módulo: el aviso igual queda en /avisos.
+    // El aviso igual queda en /avisos.
     return null;
   }
 }

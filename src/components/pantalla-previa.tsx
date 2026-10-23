@@ -29,6 +29,25 @@ export function PantallaPrevia({ recurso, alTerminar }: { recurso: Recurso; alTe
     );
   }
 
+  // El módulo nativo no está en este entorno. No es un permiso denegado:
+  // no hay nada que pedir ni nada que activar en Ajustes.
+  if (!permiso.disponible) {
+    return (
+      <View style={{ padding: Espacio.md, gap: Espacio.md }}>
+        <Tarjeta>
+          <Titulo>Acá no se puede activar {ficha.titulo.toLowerCase()}</Titulo>
+          <Parrafo>
+            Este entorno no trae el módulo nativo que hace falta. Pasa en Expo Go para Android,
+            que desde el SDK 53 ya no lo incluye.
+          </Parrafo>
+          <Nota>Para probarlo, compilá una development build con npx expo run:android.</Nota>
+          <Nota>Mientras tanto: {ficha.alternativa}</Nota>
+        </Tarjeta>
+        <Boton titulo="Listo" onPress={alTerminar} />
+      </View>
+    );
+  }
+
   if (estado === 'concedido') {
     return (
       <View style={{ padding: Espacio.md, gap: Espacio.md }}>
